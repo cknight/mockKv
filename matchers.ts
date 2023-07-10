@@ -9,7 +9,7 @@ export function anyKey(): Matcher<Deno.KvKey> {
     matches(_value?: Deno.KvKey): boolean {
       return typeof _value !== "undefined";
     }
-  };
+  }();
 }
 
 export function anyUint8array(): Matcher<Uint8Array> {
@@ -17,7 +17,7 @@ export function anyUint8array(): Matcher<Uint8Array> {
     matches(_value?: Uint8Array): boolean {
       return typeof _value !== "undefined" && _value instanceof Uint8Array;
     }
-  };
+  }();
 }
 
 export function anyString(): Matcher<string> {
@@ -25,7 +25,7 @@ export function anyString(): Matcher<string> {
     matches(_value?: string): boolean {
       return typeof _value !== "undefined" && typeof _value === "string";
     }
-  };
+  }();
 }
 
 export function anyNumber(): Matcher<number> {
@@ -33,7 +33,7 @@ export function anyNumber(): Matcher<number> {
     matches(_value?: number): boolean {
       return typeof _value !== "undefined" && typeof _value === "number";
     }
-  };
+  }();
 }
 
 export function anyBigInt(): Matcher<bigint> {
@@ -41,7 +41,7 @@ export function anyBigInt(): Matcher<bigint> {
     matches(_value?: bigint): boolean {
       return typeof _value !== "undefined" && typeof _value === "bigint";
     }
-  };
+  }();
 }
 
 export function anyBoolean(): Matcher<boolean> {
@@ -49,7 +49,7 @@ export function anyBoolean(): Matcher<boolean> {
     matches(_value?: boolean): boolean {
       return typeof _value !== "undefined" && typeof _value === "boolean";
     }
-  };
+  }();
 }
 
 export function eq<T>(expected: T): Matcher<T> {
@@ -57,7 +57,7 @@ export function eq<T>(expected: T): Matcher<T> {
     matches(value?: T): boolean {
       return equal(value, expected);
     }
-  };
+  }();
 }
 
 export function anyConsistencyLevel(): Matcher<Deno.KvConsistencyLevel> {
@@ -65,5 +65,5 @@ export function anyConsistencyLevel(): Matcher<Deno.KvConsistencyLevel> {
     matches(_value?: Deno.KvConsistencyLevel): boolean {
       return typeof _value !== "undefined";
     }
-  };
+  }();
 }
