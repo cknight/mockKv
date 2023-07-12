@@ -24,6 +24,26 @@ export function keyPartMatcher(
   }();
 }
 
+export class MultiKeyMatcher extends Matcher<Deno.KvKey[]> {
+  constructor(private keyMatchers: Matcher<Deno.KvKey>[]) {
+    super();
+  }
+
+  matches(inputKeys?: Deno.KvKey[]): boolean {
+    if (inputKeys && inputKeys.length == this.keyMatchers.length) {
+      for (let i = 0; i < this.keyMatchers.length; i++) {
+        const matcher = this.keyMatchers[i];
+        const key = inputKeys[i];
+        if (!matcher.matches(key)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+}
+
 export function getArray<T>(map: Map<string, T[]>, key: string): T[] {
   let value = map.get(key);
   if (!value) {

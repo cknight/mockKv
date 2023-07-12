@@ -1,30 +1,20 @@
 import { AssertionError } from "./deps.ts";
-import { Matcher, eq } from "./matchers.ts";
+import { eq, Matcher } from "./matchers.ts";
 import { KvFunctionNames } from "./types.ts";
-import { getArray, keyPartMatcher } from "./util.ts";
+import { getArray, keyPartMatcher, MultiKeyMatcher } from "./util.ts";
 
 export class Interaction {
   verified = false;
   constructor(public readonly args: unknown[]) {}
 }
 
-interface KvFunctions {
-  get(
-    key:
-      | Deno.KvKey
-      | Matcher<Deno.KvKey>
-      | (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[],
-    options?: {
-      consistency?: Deno.KvConsistencyLevel | Matcher<Deno.KvConsistencyLevel>;
-    },
-  ): boolean
-}
+type KvFunctions = Pick<Assertions, 'get' | 'getMany' | 'set'>;
 
 export class Assertions {
-  constructor(private calls: Map<KvFunctionNames, Interaction[]>) {}
+  constructor(private allInteractions: Map<KvFunctionNames, Interaction[]>) {}
   private verifyNumber = 1;
 
-  public get(
+  get(
     key:
       | Deno.KvKey
       | Matcher<Deno.KvKey>
@@ -42,7 +32,7 @@ export class Assertions {
       (options?.consistency && options?.consistency instanceof Matcher)
         ? options.consistency
         : eq(options?.consistency);
-    const interactions = getArray<Interaction>(this.calls, "get");
+    const interactions = getArray<Interaction>(this.allInteractions, "get");
     const matchingInteractions = interactions.filter((interaction) => {
       return keyMatcher.matches(interaction.args[0] as Deno.KvKey) &&
         (interaction.args[1] === undefined ||
@@ -50,6 +40,74 @@ export class Assertions {
             (interaction.args[1] as { consistency?: Deno.KvConsistencyLevel })
               .consistency,
           ));
+    });
+    matchingInteractions.forEach((interaction) => {
+      interaction.verified = true;
+    });
+
+    return this.verification(matchingInteractions);
+  }
+
+  getMany(
+    keys: (
+      | Deno.KvKey
+      | Matcher<Deno.KvKey>
+      | (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[]
+    )[],
+    options?: {
+      consistency?: Deno.KvConsistencyLevel | Matcher<Deno.KvConsistencyLevel>;
+    },
+  ): boolean {
+    const keyMatchers: Matcher<Deno.KvKey>[] = [];
+    keys.forEach((key) => {
+      if (key instanceof Matcher) {
+        keyMatchers.push(key);
+      } else if (key instanceof Array) {
+        keyMatchers.push(keyPartMatcher(key as Matcher<Deno.KvKeyPart>[]));
+      } else {
+        keyMatchers.push(eq(key));
+      }
+    });
+    const multiKeyMatcher = new MultiKeyMatcher(keyMatchers);
+    const consistencyMatcher =
+      (options?.consistency && options?.consistency instanceof Matcher)
+        ? options.consistency
+        : eq(options?.consistency);
+
+    const interactions = getArray<Interaction>(this.allInteractions, "getMany");
+
+    const matchingInteractions = interactions.filter((interaction) => {
+      return multiKeyMatcher.matches(interaction.args[0] as Deno.KvKey[]) &&
+        (interaction.args[1] === undefined ||
+          consistencyMatcher.matches(
+            (interaction.args[1] as { consistency?: Deno.KvConsistencyLevel })
+              .consistency,
+          ));
+    });
+    matchingInteractions.forEach((interaction) => {
+      interaction.verified = true;
+    });
+
+    return this.verification(matchingInteractions);
+  }
+
+  set(
+    key:
+      | Deno.KvKey
+      | Matcher<Deno.KvKey>
+      | (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[],
+    value: unknown,
+  ): boolean {
+    const keyMatcher = key instanceof Matcher
+      ? key
+      : (key instanceof Array)
+      ? keyPartMatcher(key as Matcher<Deno.KvKeyPart>[])
+      : eq(key);
+    const valueMatcher = value instanceof Matcher ? value : eq(value);
+    const interactions = getArray<Interaction>(this.allInteractions, "set");
+    const matchingInteractions = interactions.filter((interaction) => {
+      return keyMatcher.matches(interaction.args[0] as Deno.KvKey) &&
+        valueMatcher.matches(interaction.args[1]);
     });
     matchingInteractions.forEach((interaction) => {
       interaction.verified = true;
@@ -75,13 +133,14 @@ export class Assertions {
     } finally {
       this.resetVerification();
     }
-  }
+  };
 
   private verifyTimes = (interactions: Interaction[]) => {
     try {
       if (interactions.length !== this.verifyNumber) {
         throw new AssertionError(
-          "Expected to be called " + this.verifyNumber + " times but was called " +
+          "Expected to be called " + this.verifyNumber +
+            " times but was called " +
             interactions.length + " times",
         );
       }
@@ -89,7 +148,7 @@ export class Assertions {
     } finally {
       this.resetVerification();
     }
-  }
+  };
 
   private verifyNever = (interactions: Interaction[]) => {
     try {
@@ -103,13 +162,14 @@ export class Assertions {
     } finally {
       this.resetVerification();
     }
-  }
+  };
 
   private verifyAtLeast = (interactions: Interaction[]) => {
     try {
       if (interactions.length < this.verifyNumber) {
         throw new AssertionError(
-          "Expected to be called at least " + this.verifyNumber + " times but was only called " +
+          "Expected to be called at least " + this.verifyNumber +
+            " times but was only called " +
             interactions.length + " times",
         );
       }
@@ -117,13 +177,14 @@ export class Assertions {
     } finally {
       this.resetVerification();
     }
-  }
+  };
 
   private verifyAtMost = (interactions: Interaction[]) => {
     try {
       if (interactions.length > this.verifyNumber) {
         throw new AssertionError(
-          "Expected to be called at most " + this.verifyNumber + " times but was called " +
+          "Expected to be called at most " + this.verifyNumber +
+            " times but was called " +
             interactions.length + " times",
         );
       }
@@ -131,8 +192,9 @@ export class Assertions {
     } finally {
       this.resetVerification();
     }
-  }
-  private verification: (interactions: Interaction[]) => boolean = this.verifyAtLeast;
+  };
+  private verification: (interactions: Interaction[]) => boolean =
+    this.verifyAtLeast;
 
   once(): KvFunctions {
     this.verification = this.verifyOnce;
@@ -162,20 +224,23 @@ export class Assertions {
     return this;
   }
 
-  public noMoreInteractions(): boolean {
+  noMoreInteractions(): boolean {
     const unverifiedInteractions: string[] = [];
-    this.calls.forEach((value, key) => {
+    this.allInteractions.forEach((value, key) => {
       value.filter((interaction) => !interaction.verified).forEach(
         (interaction) => {
           const args = JSON.stringify(interaction.args);
-          unverifiedInteractions.push("kv." + key + "(" + args.substring(1, args.length -1) + ")");
+          unverifiedInteractions.push(
+            "kv." + key + "(" + args.substring(1, args.length - 1) + ")",
+          );
         },
       );
     });
 
     if (unverifiedInteractions.length !== 0) {
       throw new AssertionError(
-        "There are unverified interactions: \n\n   " + unverifiedInteractions.join("\n   ") + "\n\n",
+        "There are unverified interactions: \n\n   " +
+          unverifiedInteractions.join("\n   ") + "\n\n",
       );
     }
 

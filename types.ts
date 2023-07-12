@@ -4,4 +4,3 @@ type FunctionNames<T> = {
 }[keyof T];
 
 export type KvFunctionNames = FunctionNames<Deno.Kv>;
-

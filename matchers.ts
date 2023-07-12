@@ -12,6 +12,14 @@ export function anyKey(): Matcher<Deno.KvKey> {
   }();
 }
 
+export function anyValue(): Matcher<unknown> {
+  return new class extends Matcher<unknown> {
+    matches(_value?: unknown): boolean {
+      return typeof _value !== "undefined";
+    }
+  }();
+}
+
 export function anyUint8array(): Matcher<Uint8Array> {
   return new class extends Matcher<Uint8Array> {
     matches(_value?: Uint8Array): boolean {
