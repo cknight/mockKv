@@ -1,8 +1,5 @@
 import { equal } from "./deps.ts";
-
-export abstract class Matcher<T> {
-  abstract matches(value?: T): boolean;
-}
+import { Matcher } from "./types.ts";
 
 export function anyKey(): Matcher<Deno.KvKey> {
   return new class extends Matcher<Deno.KvKey> {
@@ -15,6 +12,14 @@ export function anyKey(): Matcher<Deno.KvKey> {
 export function anyValue(): Matcher<unknown> {
   return new class extends Matcher<unknown> {
     matches(_value?: unknown): boolean {
+      return typeof _value !== "undefined";
+    }
+  }();
+}
+
+export function anyListSelector(): Matcher<Deno.KvListSelector> {
+  return new class extends Matcher<Deno.KvListSelector> {
+    matches(_value?: Deno.KvListSelector): boolean {
       return typeof _value !== "undefined";
     }
   }();

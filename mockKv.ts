@@ -1,7 +1,7 @@
 import { Expectations } from "./whenKv.ts";
 import { KvFunctionNames } from "./types.ts";
 import { Assertions, Interaction } from "./assertKv.ts";
-import { getArray } from "./util.ts";
+import { MockKvListIterator, getArray } from "./util.ts";
 
 let existingPrototype: Deno.Kv | null = null;
 
@@ -15,6 +15,8 @@ export function mockKv() {
   //@ts-ignore - Strange type mapping issues for getMany
   Deno.Kv.prototype.getMany = mockedKv.getMany.bind(mockedKv);
   Deno.Kv.prototype.set = mockedKv.set.bind(mockedKv);
+  Deno.Kv.prototype.delete = mockedKv.delete.bind(mockedKv);
+  Deno.Kv.prototype.list = mockedKv.list.bind(mockedKv);
 
   return { whenKv: mockedKv.whenKv, assertKv: mockedKv.assertions };
 }
@@ -39,7 +41,7 @@ class MockedKv {
       : new Interaction([key]);
     this.addInteraction("get", interaction);
 
-    const expectations = this.whenKv.expectationsForGet();
+    const expectations = this.whenKv.expectationsFor("get");
     const matchingExpectation = expectations.find((expectation) => {
       const [keyMatcher, consistencyMatcher] = expectation.argMatchers;
       return keyMatcher.matches(key) &&
@@ -64,7 +66,7 @@ class MockedKv {
       : new Interaction([keys]);
     this.addInteraction("getMany", interaction);
 
-    const expectations = this.whenKv.expectationsForGetMany();
+    const expectations = this.whenKv.expectationsFor("getMany");
     const matchingExpectation = expectations.find((expectation) => {
       const [keyMatcher, consistencyMatcher] = expectation.argMatchers;
       return keyMatcher.matches(keys) &&
@@ -92,7 +94,7 @@ class MockedKv {
     const interaction = new Interaction([key, value]);
     this.addInteraction("set", interaction);
 
-    const expectations = this.whenKv.expectationsForSet();
+    const expectations = this.whenKv.expectationsFor("set");
     const matchingExpectation = expectations.find((expectation) => {
       const [keyMatcher, valueMatcher] = expectation.argMatchers;
       return keyMatcher.matches(key) && valueMatcher.matches(value);
@@ -105,7 +107,46 @@ class MockedKv {
     }
 
     //return a default value
-    return Promise.resolve({ ok: true, versionstamp: "00000000000000010000"});
+    return Promise.resolve({ ok: true, versionstamp: "00000000000000010000" });
+  }
+
+  delete(key: Deno.KvKey): Promise<void> {
+    const interaction = new Interaction([key]);
+    this.addInteraction("delete", interaction);
+
+    const expectations = this.whenKv.expectationsFor("delete");
+    const matchingExpectation = expectations.find((expectation) => {
+      const [keyMatcher] = expectation.argMatchers;
+      return keyMatcher.matches(key);
+    });
+
+    // this will throw or return undefined
+    matchingExpectation?.thenable.next();
+
+    return Promise.resolve();
+  }
+
+  list<T = unknown>(
+    selector: Deno.KvListSelector,
+    options?: Deno.KvListOptions,
+  ): Deno.KvListIterator<T> {
+    const interaction = options
+      ? new Interaction([selector, options])
+      : new Interaction([selector]);
+    this.addInteraction("list", interaction);
+
+    const expectations = this.whenKv.expectationsFor("list");
+    const matchingExpectation = expectations.find((expectation) => {
+      const [selectorMatcher, optionsMatcher] = expectation.argMatchers;
+      return selectorMatcher.matches(selector) &&
+        optionsMatcher.matches(options);
+    });
+    if (matchingExpectation) {
+      return matchingExpectation.thenable.next() as Deno.KvListIterator<T>;
+    }
+
+    //return default value
+    return new MockKvListIterator<T>([], "");
   }
 
   private addInteraction(fn: KvFunctionNames, interaction: Interaction) {

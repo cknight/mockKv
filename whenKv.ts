@@ -1,6 +1,17 @@
-import { eq, Matcher } from "./matchers.ts";
-import { KvFunctionNames } from "./types.ts";
-import { getArray, keyPartMatcher, MultiKeyMatcher } from "./util.ts";
+import { eq } from "./matchers.ts";
+import {
+  KvFunctionNames,
+  KvKeyMatcher,
+  KvListOptionsMatcher,
+  KvListSelectorMatcher,
+  Matcher,
+} from "./types.ts";
+import {
+  getArray,
+  getKeyMatcher,
+  matchObjectsMatcher,
+  MultiKeyMatcher,
+} from "./util.ts";
 
 class Expectation<T> {
   constructor(
@@ -9,16 +20,19 @@ class Expectation<T> {
   ) {}
 }
 
-type ExpectationTypes = Deno.KvEntryMaybe<unknown> | Deno.KvEntryMaybe<
-  unknown
->[] | Deno.KvCommitResult;
+type ExpectationTypes =
+  | Deno.KvEntryMaybe<unknown>
+  | Deno.KvEntryMaybe<
+    unknown
+  >[]
+  | Deno.KvCommitResult
+  | Deno.KvListIterator<unknown>
+  | undefined;
 
 interface Thenable<T> {
   thenReturn(...results: T[]): Thenable<T>;
   thenThrow(...errors: Error[]): Thenable<T>;
 }
-
-type ThenableThrow<T = void> = Pick<Thenable<T>, "thenThrow">;
 
 class Throwable {
   constructor(private error: Error) {}
@@ -32,6 +46,9 @@ class ResultsGenerator<T> implements Thenable<T> {
   private results: (T | Throwable)[] = [];
 
   thenReturn(...results: T[]): this {
+    if (results.length == 0) {
+      this.results.push(undefined as unknown as T);
+    }
     this.results.push(...results);
     return this;
   }
@@ -39,6 +56,10 @@ class ResultsGenerator<T> implements Thenable<T> {
   thenThrow(...errors: Error[]): this {
     errors.forEach((error) => this.results.push(new Throwable(error)));
     return this;
+  }
+
+  getResults(): (T | Throwable)[] {
+    return this.results;
   }
 
   next(): T | undefined {
@@ -49,6 +70,7 @@ class ResultsGenerator<T> implements Thenable<T> {
         : this.results.shift()!;
 
       if (result instanceof Throwable) {
+        Error.captureStackTrace(result.getError());
         throw result.getError();
       }
 
@@ -63,38 +85,17 @@ export class Expectations {
   private expectations: Map<KvFunctionNames, Expectation<ExpectationTypes>[]> =
     new Map();
 
-  expectationsForGet(): Expectation<Deno.KvEntryMaybe<unknown>>[] {
-    return (this.expectations.get("get") || []) as Expectation<
-      Deno.KvEntryMaybe<unknown>
-    >[];
-  }
-
-  expectationsForGetMany(): Expectation<Deno.KvEntryMaybe<unknown>[]>[] {
-    return (this.expectations.get("getMany") || []) as Expectation<
-      Deno.KvEntryMaybe<unknown>[]
-    >[];
-  }
-
-  expectationsForSet(): Expectation<Deno.KvCommitResult>[] {
-    return (this.expectations.get("set") || []) as Expectation<
-      Deno.KvCommitResult
-    >[];
+  expectationsFor(functionName: KvFunctionNames) {
+    return this.expectations.get(functionName) || [];
   }
 
   get(
-    key:
-      | Deno.KvKey
-      | Matcher<Deno.KvKey>
-      | (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[],
+    key: KvKeyMatcher,
     options?: {
       consistency?: Deno.KvConsistencyLevel | Matcher<Deno.KvConsistencyLevel>;
     },
   ): Thenable<Deno.KvEntryMaybe<unknown>> {
-    const keyMatcher = key instanceof Matcher
-      ? key
-      : (key instanceof Array)
-      ? keyPartMatcher(key as Matcher<Deno.KvKeyPart>[])
-      : eq(key);
+    const keyMatcher = getKeyMatcher(key);
     const consistencyMatcher =
       (options?.consistency && options?.consistency instanceof Matcher)
         ? options.consistency
@@ -113,24 +114,14 @@ export class Expectations {
   }
 
   getMany(
-    keys: (
-      | Deno.KvKey
-      | Matcher<Deno.KvKey>
-      | (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[]
-    )[],
+    keys: KvKeyMatcher[],
     options?: {
       consistency?: Deno.KvConsistencyLevel | Matcher<Deno.KvConsistencyLevel>;
     },
   ): Thenable<Deno.KvEntry<unknown>[]> {
     const keyMatchers: Matcher<Deno.KvKey>[] = [];
     keys.forEach((key) => {
-      if (key instanceof Matcher) {
-        keyMatchers.push(key);
-      } else if (key instanceof Array) {
-        keyMatchers.push(keyPartMatcher(key as Matcher<Deno.KvKeyPart>[]));
-      } else {
-        keyMatchers.push(eq(key));
-      }
+      keyMatchers.push(getKeyMatcher(key));
     });
     const consistencyMatcher =
       (options?.consistency && options?.consistency instanceof Matcher)
@@ -154,17 +145,10 @@ export class Expectations {
   }
 
   set(
-    key:
-      | Deno.KvKey
-      | Matcher<Deno.KvKey>
-      | (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[],
+    key: KvKeyMatcher,
     value: unknown | Matcher<unknown>,
   ): Thenable<Deno.KvCommitResult> {
-    const keyMatcher = key instanceof Matcher
-      ? key
-      : (key instanceof Array)
-      ? keyPartMatcher(key as Matcher<Deno.KvKeyPart>[])
-      : eq(key);
+    const keyMatcher = getKeyMatcher(key);
 
     const valueMatcher = value instanceof Matcher ? value : eq(value);
 
@@ -172,10 +156,71 @@ export class Expectations {
       this.expectations,
       "set",
     );
-    const thenable = new ResultsGenerator<never>();
-
+    const thenable = new ResultsGenerator<Deno.KvCommitResult>();
     getExpectations.push(
       new Expectation([keyMatcher, valueMatcher], thenable),
+    );
+
+    return thenable;
+  }
+
+  delete(
+    key: KvKeyMatcher,
+  ): Thenable<undefined> {
+    const keyMatcher = getKeyMatcher(key);
+    const getExpectations = getArray<Expectation<ExpectationTypes>>(
+      this.expectations,
+      "delete",
+    );
+    const thenable = new ResultsGenerator<undefined>();
+    getExpectations.push(
+      new Expectation([keyMatcher], thenable),
+    );
+
+    return thenable;
+  }
+
+  // export type KvListSelector =
+  //   | { prefix: KvKey }
+  //   | { prefix: KvKey; start: KvKey }
+  //   | { prefix: KvKey; end: KvKey }
+  //   | { start: KvKey; end: KvKey };
+  //
+  // export interface KvListOptions {
+  //   limit?: number;
+  //   cursor?: string;
+  //   reverse?: boolean;
+  //   consistency?: KvConsistencyLevel;
+  //   batchSize?: number;
+  // }
+  //
+  // export class KvListIterator<T> implements AsyncIterableIterator<KvEntry<T>> {
+  //   get cursor(): string;
+  //   next(): Promise<IteratorResult<KvEntry<T>, undefined>>;
+  //   [Symbol.asyncIterator](): AsyncIterableIterator<KvEntry<T>>;
+  // }
+
+  list<T = unknown>(
+    selector: KvListSelectorMatcher | Matcher<Deno.KvListSelector>,
+    options?: KvListOptionsMatcher | Matcher<Deno.KvListOptions>,
+  ): Thenable<Deno.KvListIterator<T>> {
+    const listSelectorMatcher = selector instanceof Matcher
+      ? selector
+      : matchObjectsMatcher<Deno.KvListSelector>(selector);
+    const consistencyMatcher = options
+      ? (options instanceof Matcher
+        ? options
+        : matchObjectsMatcher<KvListOptionsMatcher>(options))
+      : eq(undefined);
+
+    const listExpectations = getArray<Expectation<ExpectationTypes>>(
+      this.expectations,
+      "list",
+    );
+    const thenable = new ResultsGenerator<Deno.KvListIterator<T>>();
+
+    listExpectations.push(
+      new Expectation([listSelectorMatcher, consistencyMatcher], thenable),
     );
 
     return thenable;

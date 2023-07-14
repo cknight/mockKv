@@ -1,6 +1,6 @@
 import { AssertionError } from "./deps.ts";
-import { eq, Matcher } from "./matchers.ts";
-import { KvFunctionNames } from "./types.ts";
+import { eq } from "./matchers.ts";
+import { KvFunctionNames, Matcher } from "./types.ts";
 import { getArray, keyPartMatcher, MultiKeyMatcher } from "./util.ts";
 
 export class Interaction {
@@ -8,7 +8,7 @@ export class Interaction {
   constructor(public readonly args: unknown[]) {}
 }
 
-type KvFunctions = Pick<Assertions, 'get' | 'getMany' | 'set'>;
+type KvFunctions = Pick<Assertions, "get" | "getMany" | "set">;
 
 export class Assertions {
   constructor(private allInteractions: Map<KvFunctionNames, Interaction[]>) {}
