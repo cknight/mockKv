@@ -1,14 +1,19 @@
 import { AssertionError } from "./deps.ts";
 import { eq } from "./matchers.ts";
-import { KvFunctionNames, Matcher } from "./types.ts";
-import { getArray, keyPartMatcher, MultiKeyMatcher } from "./util.ts";
+import {
+  KvFunctionNames,
+  KvListOptionsMatcher,
+  KvListSelectorMatcher,
+  Matcher,
+} from "./types.ts";
+import { getArray, keyPartMatcher, matchesListSelector, matchesObject, MultiKeyMatcher } from "./util.ts";
 
 export class Interaction {
   verified = false;
   constructor(public readonly args: unknown[]) {}
 }
 
-type KvFunctions = Pick<Assertions, "get" | "getMany" | "set">;
+type KvFunctions = Pick<Assertions, "get" | "getMany" | "set" | "list">;
 
 export class Assertions {
   constructor(private allInteractions: Map<KvFunctionNames, Interaction[]>) {}
@@ -108,6 +113,32 @@ export class Assertions {
     const matchingInteractions = interactions.filter((interaction) => {
       return keyMatcher.matches(interaction.args[0] as Deno.KvKey) &&
         valueMatcher.matches(interaction.args[1]);
+    });
+    matchingInteractions.forEach((interaction) => {
+      interaction.verified = true;
+    });
+
+    return this.verification(matchingInteractions);
+  }
+
+  list(
+    selector: KvListSelectorMatcher | Matcher<Deno.KvListSelector>,
+    options?: KvListOptionsMatcher | Matcher<Deno.KvListOptions>,
+  ): boolean {
+    const listSelectorMatcher = selector instanceof Matcher
+      ? selector
+      : matchesListSelector(selector);
+    const consistencyMatcher: Matcher<Deno.KvListOptions> = options instanceof Matcher
+        ? options
+        : matchesObject(options);
+    const interactions = getArray<Interaction>(this.allInteractions, "list");
+    const matchingInteractions = interactions.filter((interaction) => {
+      const actualOptions = interaction
+        .args[1] as (Deno.KvListOptions | undefined);
+      return listSelectorMatcher.matches(
+        interaction.args[0] as Deno.KvListSelector,
+      ) &&
+        consistencyMatcher.matches(actualOptions);
     });
     matchingInteractions.forEach((interaction) => {
       interaction.verified = true;

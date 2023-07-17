@@ -1,6 +1,11 @@
 import { equal } from "./deps.ts";
 import { eq } from "./matchers.ts";
-import { KvKeyMatcher, Matcher } from "./types.ts";
+import {
+  KvKeyMatcher,
+  KvListOptionsMatcher,
+  KvListSelectorMatcher,
+  Matcher,
+} from "./types.ts";
 
 export function keyPartMatcher(
   matchers: (Deno.KvKeyPart | Matcher<Deno.KvKeyPart>)[],
@@ -33,74 +38,101 @@ export function getKeyMatcher(key: KvKeyMatcher) {
     : eq(key);
 }
 
-export function matchObjectsMatcher<T extends { [key: string]: unknown }>(
-  expected: { [key: string]: unknown },
-): Matcher<{ [key: string]: unknown }> {
-  return new class extends Matcher<T> {
-    matches(actual?: { [key: string]: unknown }): boolean {
+interface Test {
+  limit?: number;
+}
+
+export function matchesListSelector(
+  expected: KvListSelectorMatcher | Matcher<Deno.KvListSelector>,
+) {
+  return new class extends Matcher<Deno.KvListSelector> {
+    matches(actual?: Deno.KvListSelector): boolean {
       if (actual) {
-        const expectedKeys = Object.keys(expected);
-        const actualKeys = Object.keys(actual);
-        if (expectedKeys.length == actualKeys.length) {
-          for (let i = 0; i < expectedKeys.length; i++) {
-            const key = expectedKeys[i];
-            if (!actualKeys.includes(key)) {
-              // actual is missing a key which is present in expected
+        //check number of actual properties matches expected
+        if (Object.keys(expected).length !== Object.keys(actual).length) {
+          return false;
+        } else if (expected instanceof Matcher) {
+          return expected.matches(actual);
+        } else {
+          const expectedMatcher = expected as KvListSelectorMatcher;
+          if ("prefix" in expectedMatcher) {
+            if (
+              !("prefix" in actual) ||
+              !getKeyMatcher(expectedMatcher.prefix).matches(actual.prefix)
+            ) {
               return false;
             }
-            if (expected[key] instanceof Matcher) {
-              if (!(expected[key] as Matcher<unknown>).matches(actual[key])) {
-                return false;
-              }
-            } else if (expected[key] instanceof Array && actual[key] instanceof Array) {
-              const expectedArray = expected[key] as unknown[];
-              const actualArray = actual[key] as unknown[];
-              // CAREFUL:  This code assumes object properties of type Array are Deno.KvKeys or Deno.KvKey[]
-              if ((expectedArray)[0] && (expectedArray)[0] instanceof Array) {
-                // expectedArray is an array of arrays, likely signifying a Deno.KvKey[]
-                const expectedKeyMatchers = expectedArray as Array<KvKeyMatcher>;
-                if (expectedKeyMatchers.length === actual.length) {
-                  const keyMatchers: Matcher<Deno.KvKey>[] = [];
-                  expectedKeyMatchers.forEach((key) => {
-                    keyMatchers.push(getKeyMatcher(key));
-                  });
-                  if (!new MultiKeyMatcher(keyMatchers).matches(actual[key] as Deno.KvKey[])) {
-                    return false;
-                  }
-                } else {
-                  return false;
-                }
-              } else if (isKvKeyPartArray(actual[key])) {
-                // actual array is a Deno.KvKey (array of Deno.KvKeyParts)
-                if (!keyPartMatcher(expected[key] as Matcher<Deno.KvKeyPart>[]).matches(actual[key] as Deno.KvKey)) {
-                  return false;
-                }
-              } else {
-                return false;
-              }
-            } else {
-              if (!equal(expected[key], actual[key])) {
-                return false;
-              }
+          }
+          if ("start" in expectedMatcher) {
+            if (
+              !("start" in actual) ||
+              !getKeyMatcher(expectedMatcher.start).matches(actual.start)
+            ) {
+              return false;
             }
           }
-          return true;
+          if ("end" in expectedMatcher) {
+            if (
+              !("end" in actual) ||
+              !getKeyMatcher(expectedMatcher.end).matches(actual.end)
+            ) {
+              return false;
+            }
+          }
         }
+        return true;
       }
-      // different number of keys
       return false;
     }
   }();
 }
 
-function isKvKeyPartArray(key: unknown): key is Deno.KvKey {
-  if (!Array.isArray(key)) {
-    return false;
-  }
-  
-  return key.every(
-    (item): item is Deno.KvKeyPart => typeof item === 'string' || typeof item === 'number' || typeof item === 'bigint' || typeof item === 'boolean' || item instanceof Uint8Array
-  );
+/**
+ * Match an arbitrary object.  The actual object must exist and have the same number of properties.
+ * Values of the expected objected can be exact values (compared using deep object comparison) or
+ * a matcher.
+ *
+ * @param expected, an object of key/value pairs or a matcher
+ * @returns a matcher which accepts an actual object, which will return true if the actual object
+ * meets the definition of matching
+ */
+export function matchesObject(
+  expected: { [key: string]: unknown } | Matcher<unknown> | undefined,
+) {
+  return new class extends Matcher<Deno.KvListOptions> {
+    matches(actual?: { [key: string]: unknown }): boolean {
+      if ((expected === undefined && actual !== undefined) || (expected !== undefined && actual === undefined)) {
+        return false;
+      } else if (expected === undefined && actual === undefined) {
+        return true;
+      } else if (expected !== undefined && actual !== undefined) {
+        //check number of actual properties matches expected
+        if (Object.keys(expected).length !== Object.keys(actual).length) {
+          return false;
+        } else if (expected instanceof Matcher) {
+          return expected.matches(actual);
+        } else {
+          let objectsMatch = true;
+          Object.keys(expected).forEach((key) => {
+            if (!(key in actual)) {
+              objectsMatch = false;
+              return;
+            } else if (expected[key] instanceof Matcher) {
+              if (!(expected[key] as Matcher<unknown>).matches(actual[key])) {
+                objectsMatch = false;
+                return;
+              }
+            } else if (!equal(expected[key], actual[key])) {
+              objectsMatch = false;
+              return;
+            }
+          });
+          return objectsMatch;
+        }
+      }
+      throw new Error("Design error, this should be unreachable");
+    }
+  }();
 }
 
 export class MultiKeyMatcher extends Matcher<Deno.KvKey[]> {

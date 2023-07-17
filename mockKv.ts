@@ -1,7 +1,7 @@
 import { Expectations } from "./whenKv.ts";
 import { KvFunctionNames } from "./types.ts";
 import { Assertions, Interaction } from "./assertKv.ts";
-import { MockKvListIterator, getArray } from "./util.ts";
+import { getArray, MockKvListIterator } from "./util.ts";
 
 let existingPrototype: Deno.Kv | null = null;
 

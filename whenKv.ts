@@ -9,7 +9,8 @@ import {
 import {
   getArray,
   getKeyMatcher,
-  matchObjectsMatcher,
+  matchesListSelector,
+  matchesObject,
   MultiKeyMatcher,
 } from "./util.ts";
 
@@ -206,11 +207,9 @@ export class Expectations {
   ): Thenable<Deno.KvListIterator<T>> {
     const listSelectorMatcher = selector instanceof Matcher
       ? selector
-      : matchObjectsMatcher<Deno.KvListSelector>(selector);
+      : matchesListSelector(selector);
     const consistencyMatcher = options
-      ? (options instanceof Matcher
-        ? options
-        : matchObjectsMatcher<KvListOptionsMatcher>(options))
+      ? (options instanceof Matcher ? options : matchesObject(options))
       : eq(undefined);
 
     const listExpectations = getArray<Expectation<ExpectationTypes>>(
