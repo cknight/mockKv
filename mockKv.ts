@@ -17,6 +17,7 @@ export function mockKv() {
   Deno.Kv.prototype.set = mockedKv.set.bind(mockedKv);
   Deno.Kv.prototype.delete = mockedKv.delete.bind(mockedKv);
   Deno.Kv.prototype.list = mockedKv.list.bind(mockedKv);
+  Deno.Kv.prototype.close = mockedKv.close.bind(mockedKv);
 
   return { whenKv: mockedKv.whenKv, assertKv: mockedKv.assertions };
 }
@@ -147,6 +148,10 @@ class MockedKv {
 
     //return default value
     return new MockKvListIterator<T>([], "");
+  }
+
+  close():void {
+    this.addInteraction("close", new Interaction([]));
   }
 
   private addInteraction(fn: KvFunctionNames, interaction: Interaction) {

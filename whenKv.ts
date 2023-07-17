@@ -181,26 +181,6 @@ export class Expectations {
     return thenable;
   }
 
-  // export type KvListSelector =
-  //   | { prefix: KvKey }
-  //   | { prefix: KvKey; start: KvKey }
-  //   | { prefix: KvKey; end: KvKey }
-  //   | { start: KvKey; end: KvKey };
-  //
-  // export interface KvListOptions {
-  //   limit?: number;
-  //   cursor?: string;
-  //   reverse?: boolean;
-  //   consistency?: KvConsistencyLevel;
-  //   batchSize?: number;
-  // }
-  //
-  // export class KvListIterator<T> implements AsyncIterableIterator<KvEntry<T>> {
-  //   get cursor(): string;
-  //   next(): Promise<IteratorResult<KvEntry<T>, undefined>>;
-  //   [Symbol.asyncIterator](): AsyncIterableIterator<KvEntry<T>>;
-  // }
-
   list<T = unknown>(
     selector: KvListSelectorMatcher | Matcher<Deno.KvListSelector>,
     options?: KvListOptionsMatcher | Matcher<Deno.KvListOptions>,

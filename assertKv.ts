@@ -13,7 +13,7 @@ export class Interaction {
   constructor(public readonly args: unknown[]) {}
 }
 
-type KvFunctions = Pick<Assertions, "get" | "getMany" | "set" | "list">;
+type KvFunctions = Pick<Assertions, "get" | "getMany" | "set" | "list" | "close">;
 
 export class Assertions {
   constructor(private allInteractions: Map<KvFunctionNames, Interaction[]>) {}
@@ -147,6 +147,14 @@ export class Assertions {
     return this.verification(matchingInteractions);
   }
 
+  close(): boolean {
+    const interactions = getArray<Interaction>(this.allInteractions, "close");
+    interactions.forEach((interaction) => {
+      interaction.verified = true;
+    });
+    return this.verification(interactions);
+  }
+
   private resetVerification() {
     this.verification = this.verifyAtLeast;
     this.verifyNumber = 1;
@@ -257,16 +265,23 @@ export class Assertions {
 
   noMoreInteractions(): boolean {
     const unverifiedInteractions: string[] = [];
+    let visited = 0;
     this.allInteractions.forEach((value, key) => {
       value.filter((interaction) => !interaction.verified).forEach(
         (interaction) => {
-          const args = JSON.stringify(interaction.args);
-          unverifiedInteractions.push(
-            "kv." + key + "(" + args.substring(1, args.length - 1) + ")",
-          );
+          if (visited++ < 10) {
+            const args = JSON.stringify(interaction.args);
+            unverifiedInteractions.push(
+              "kv." + key + "(" + args.substring(1, args.length - 1) + ")",
+            );
+          }
         },
       );
     });
+
+    if (visited > 10) {
+      unverifiedInteractions.push("... (" + (visited - 10) + " more)");
+    }
 
     if (unverifiedInteractions.length !== 0) {
       throw new AssertionError(
