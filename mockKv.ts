@@ -5,6 +5,8 @@ import { getArray, MockKvListIterator } from "./util.ts";
 
 let existingPrototype: Deno.Kv | null = null;
 
+const DEFAULT_KV_COMMIT:Deno.KvCommitResult = { ok: true, versionstamp: "00000000000000010000" };
+
 export function mockKv() {
   if (!existingPrototype) {
     existingPrototype = Deno.Kv.prototype;
@@ -18,6 +20,7 @@ export function mockKv() {
   Deno.Kv.prototype.delete = mockedKv.delete.bind(mockedKv);
   Deno.Kv.prototype.list = mockedKv.list.bind(mockedKv);
   Deno.Kv.prototype.close = mockedKv.close.bind(mockedKv);
+  Deno.Kv.prototype.enqueue = mockedKv.enqueue.bind(mockedKv);
 
   return { whenKv: mockedKv.whenKv, assertKv: mockedKv.assertions };
 }
@@ -108,7 +111,7 @@ class MockedKv {
     }
 
     //return a default value
-    return Promise.resolve({ ok: true, versionstamp: "00000000000000010000" });
+    return Promise.resolve(DEFAULT_KV_COMMIT);
   }
 
   delete(key: Deno.KvKey): Promise<void> {
@@ -150,7 +153,34 @@ class MockedKv {
     return new MockKvListIterator<T>([], "");
   }
 
-  close():void {
+  enqueue(
+    value: unknown,
+    options?: { delay?: number; keysIfUndelivered?: Deno.KvKey[] },
+  ): Promise<Deno.KvCommitResult> {
+    const interaction = options
+      ? new Interaction([value, options])
+      : new Interaction([value]);
+    this.addInteraction("enqueue", interaction);
+
+    const expectations = this.whenKv.expectationsFor("enqueue");
+    const matchingExpectation = expectations.find((expectation) => {
+      const [valueMatcher, optionsMatcher] = expectation.argMatchers;
+      return valueMatcher.matches(value) &&
+        optionsMatcher.matches(options);
+    });
+    if (matchingExpectation) {
+      return Promise.resolve(
+        matchingExpectation.thenable.next() as Deno.KvCommitResult,
+      );
+    }
+
+    //return default value
+    return Promise.resolve(DEFAULT_KV_COMMIT);
+  }
+
+  
+
+  close(): void {
     this.addInteraction("close", new Interaction([]));
   }
 

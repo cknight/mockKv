@@ -1,19 +1,29 @@
 import { AssertionError } from "./deps.ts";
 import { eq } from "./matchers.ts";
 import {
+KvEnqueueOptionsMatcher,
   KvFunctionNames,
   KvListOptionsMatcher,
   KvListSelectorMatcher,
   Matcher,
 } from "./types.ts";
-import { getArray, keyPartMatcher, matchesListSelector, matchesObject, MultiKeyMatcher } from "./util.ts";
+import {
+  getArray,
+  keyPartMatcher,
+  matchesListSelector,
+  matchesObject,
+  MultiKeyMatcher,
+} from "./util.ts";
 
 export class Interaction {
   verified = false;
   constructor(public readonly args: unknown[]) {}
 }
 
-type KvFunctions = Pick<Assertions, "get" | "getMany" | "set" | "list" | "close">;
+type KvFunctions = Pick<
+  Assertions,
+  "get" | "getMany" | "set" | "list" | "close"
+>;
 
 export class Assertions {
   constructor(private allInteractions: Map<KvFunctionNames, Interaction[]>) {}
@@ -128,9 +138,8 @@ export class Assertions {
     const listSelectorMatcher = selector instanceof Matcher
       ? selector
       : matchesListSelector(selector);
-    const consistencyMatcher: Matcher<Deno.KvListOptions> = options instanceof Matcher
-        ? options
-        : matchesObject(options);
+    const consistencyMatcher: Matcher<Deno.KvListOptions> =
+      options instanceof Matcher ? options : matchesObject(options);
     const interactions = getArray<Interaction>(this.allInteractions, "list");
     const matchingInteractions = interactions.filter((interaction) => {
       const actualOptions = interaction
@@ -139,6 +148,29 @@ export class Assertions {
         interaction.args[0] as Deno.KvListSelector,
       ) &&
         consistencyMatcher.matches(actualOptions);
+    });
+    matchingInteractions.forEach((interaction) => {
+      interaction.verified = true;
+    });
+
+    return this.verification(matchingInteractions);
+  }
+
+  enqueue(value: unknown | Matcher<unknown>,
+    options?:
+      | KvEnqueueOptionsMatcher
+      | Matcher<{ delay?: number; keysIfUndelivered?: Deno.KvKey[] }>,
+  ): boolean {
+    const valueMatcher = value instanceof Matcher ? value : eq(value);
+    const optionsMatcher = options instanceof Matcher
+      ? options
+      : matchesObject(options);
+    const interactions = getArray<Interaction>(this.allInteractions, "enqueue");
+    const matchingInteractions = interactions.filter((interaction) => {
+      const actualOptions = interaction
+        .args[1] as { delay?: number; keysIfUndelivered?: Deno.KvKey[] };
+      return valueMatcher.matches(interaction.args[0]) &&
+        optionsMatcher.matches(actualOptions);
     });
     matchingInteractions.forEach((interaction) => {
       interaction.verified = true;

@@ -9,6 +9,14 @@ export function anyKey(): Matcher<Deno.KvKey> {
   }();
 }
 
+export function anyKeys(): Matcher<Deno.KvKey[]> {
+  return new class extends Matcher<Deno.KvKey[]> {
+    matches(_value?: Deno.KvKey[]): boolean {
+      return typeof _value !== "undefined";
+    }
+  }();
+}
+
 export function anyValue(): Matcher<unknown> {
   return new class extends Matcher<unknown> {
     matches(_value?: unknown): boolean {

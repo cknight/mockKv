@@ -27,3 +27,8 @@ export type KvListOptionsMatcher = {
   consistency?: Deno.KvConsistencyLevel | Matcher<Deno.KvConsistencyLevel>;
   batchSize?: number | Matcher<number>;
 };
+
+export type KvEnqueueOptionsMatcher = {
+  delay?: number | Matcher<number>;
+  keysIfUndelivered?: KvKeyMatcher[] | Matcher<Deno.KvKey[]>;
+};

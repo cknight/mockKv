@@ -1,5 +1,6 @@
 import { eq } from "./matchers.ts";
 import {
+  KvEnqueueOptionsMatcher,
   KvFunctionNames,
   KvKeyMatcher,
   KvListOptionsMatcher,
@@ -115,15 +116,21 @@ export class Expectations {
   }
 
   getMany(
-    keys: KvKeyMatcher[],
+    keys: KvKeyMatcher[] | Matcher<Deno.KvKey[]>,
     options?: {
       consistency?: Deno.KvConsistencyLevel | Matcher<Deno.KvConsistencyLevel>;
     },
   ): Thenable<Deno.KvEntry<unknown>[]> {
-    const keyMatchers: Matcher<Deno.KvKey>[] = [];
-    keys.forEach((key) => {
-      keyMatchers.push(getKeyMatcher(key));
-    });
+    let keyMatcher: Matcher<Deno.KvKey[]>;
+    if (keys instanceof Matcher) {
+      keyMatcher = keys;
+    } else {
+      const keyMatchers: Matcher<Deno.KvKey>[] = [];
+      keys.forEach((key) => {
+        keyMatchers.push(getKeyMatcher(key));
+      });
+      keyMatcher = new MultiKeyMatcher(keyMatchers);
+    }
     const consistencyMatcher =
       (options?.consistency && options?.consistency instanceof Matcher)
         ? options.consistency
@@ -137,7 +144,7 @@ export class Expectations {
 
     getExpectations.push(
       new Expectation(
-        [new MultiKeyMatcher(keyMatchers), consistencyMatcher],
+        [keyMatcher, consistencyMatcher],
         thenable,
       ),
     );
@@ -204,4 +211,52 @@ export class Expectations {
 
     return thenable;
   }
+
+  enqueue(
+    value: unknown | Matcher<unknown>,
+    options?:
+      | KvEnqueueOptionsMatcher
+      | Matcher<{ delay?: number; keysIfUndelivered?: Deno.KvKey[] }>,
+  ): Thenable<Deno.KvCommitResult> {
+    const valueMatcher = value instanceof Matcher ? value : eq(value);
+    const processedOptions: _KvEnqueueOptionsMatcher = {};
+    if (typeof options === 'object' && "delay" in options && options.delay !== undefined) {
+      processedOptions.delay = options.delay;
+    }
+    if (typeof options === 'object' && "keysIfUndelivered" in options && options.keysIfUndelivered !== undefined) {
+      let keyMatcher: Matcher<Deno.KvKey[]>;
+      if (options.keysIfUndelivered instanceof Matcher) {
+        keyMatcher = options.keysIfUndelivered;
+      } else {
+        const keyMatchers: Matcher<Deno.KvKey>[] = [];
+        options.keysIfUndelivered.forEach((key) => {
+          keyMatchers.push(getKeyMatcher(key));
+        });
+        keyMatcher = new MultiKeyMatcher(keyMatchers);
+      }
+  
+      processedOptions.keysIfUndelivered = keyMatcher;
+    }
+    const optionsMatcher = options
+      ? (options instanceof Matcher ? options : matchesObject(processedOptions))
+      : eq(undefined);
+
+    const enqueueExpectations = getArray<Expectation<ExpectationTypes>>(
+      this.expectations,
+      "enqueue",
+    );
+    const thenable = new ResultsGenerator<Deno.KvCommitResult>();
+
+    enqueueExpectations.push(
+      new Expectation([valueMatcher, optionsMatcher], thenable),
+    );
+
+    return thenable;
+  }
 }
+
+type _KvEnqueueOptionsMatcher = {
+  delay?: number | Matcher<number>;
+  keysIfUndelivered?: Matcher<Deno.KvKey[]>;
+};
+

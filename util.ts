@@ -101,7 +101,10 @@ export function matchesObject(
 ) {
   return new class extends Matcher<Deno.KvListOptions> {
     matches(actual?: { [key: string]: unknown }): boolean {
-      if ((expected === undefined && actual !== undefined) || (expected !== undefined && actual === undefined)) {
+      if (
+        (expected === undefined && actual !== undefined) ||
+        (expected !== undefined && actual === undefined)
+      ) {
         return false;
       } else if (expected === undefined && actual === undefined) {
         return true;
