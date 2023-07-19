@@ -5,7 +5,10 @@ import { getArray, MockKvListIterator } from "./util.ts";
 
 let existingPrototype: Deno.Kv | null = null;
 
-const DEFAULT_KV_COMMIT:Deno.KvCommitResult = { ok: true, versionstamp: "00000000000000010000" };
+const DEFAULT_KV_COMMIT: Deno.KvCommitResult = {
+  ok: true,
+  versionstamp: "00000000000000010000",
+};
 
 export function mockKv() {
   if (!existingPrototype) {
@@ -177,8 +180,6 @@ class MockedKv {
     //return default value
     return Promise.resolve(DEFAULT_KV_COMMIT);
   }
-
-  
 
   close(): void {
     this.addInteraction("close", new Interaction([]));

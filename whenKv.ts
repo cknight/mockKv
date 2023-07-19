@@ -220,10 +220,16 @@ export class Expectations {
   ): Thenable<Deno.KvCommitResult> {
     const valueMatcher = value instanceof Matcher ? value : eq(value);
     const processedOptions: _KvEnqueueOptionsMatcher = {};
-    if (typeof options === 'object' && "delay" in options && options.delay !== undefined) {
+    if (
+      typeof options === "object" && "delay" in options &&
+      options.delay !== undefined
+    ) {
       processedOptions.delay = options.delay;
     }
-    if (typeof options === 'object' && "keysIfUndelivered" in options && options.keysIfUndelivered !== undefined) {
+    if (
+      typeof options === "object" && "keysIfUndelivered" in options &&
+      options.keysIfUndelivered !== undefined
+    ) {
       let keyMatcher: Matcher<Deno.KvKey[]>;
       if (options.keysIfUndelivered instanceof Matcher) {
         keyMatcher = options.keysIfUndelivered;
@@ -234,7 +240,7 @@ export class Expectations {
         });
         keyMatcher = new MultiKeyMatcher(keyMatchers);
       }
-  
+
       processedOptions.keysIfUndelivered = keyMatcher;
     }
     const optionsMatcher = options
@@ -253,10 +259,26 @@ export class Expectations {
 
     return thenable;
   }
+
+  listenQueue(
+    handler:
+      | Matcher<(value: unknown) => Promise<void> | void>
+      | ((value: unknown) => Promise<void> | void),
+  ): Thenable<undefined> {
+    const handlerMatcher = handler instanceof Matcher ? handler : eq(handler);
+    const listenExpectations = getArray<Expectation<ExpectationTypes>>(
+      this.expectations,
+      "listenQueue",
+    );
+    const thenable = new ResultsGenerator<undefined>();
+    listenExpectations.push(
+      new Expectation([handlerMatcher], thenable),
+    );
+    return thenable;
+  }
 }
 
 type _KvEnqueueOptionsMatcher = {
   delay?: number | Matcher<number>;
   keysIfUndelivered?: Matcher<Deno.KvKey[]>;
 };
-

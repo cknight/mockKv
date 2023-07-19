@@ -1,7 +1,7 @@
 import { AssertionError } from "./deps.ts";
 import { eq } from "./matchers.ts";
 import {
-KvEnqueueOptionsMatcher,
+  KvEnqueueOptionsMatcher,
   KvFunctionNames,
   KvListOptionsMatcher,
   KvListSelectorMatcher,
@@ -156,7 +156,8 @@ export class Assertions {
     return this.verification(matchingInteractions);
   }
 
-  enqueue(value: unknown | Matcher<unknown>,
+  enqueue(
+    value: unknown | Matcher<unknown>,
     options?:
       | KvEnqueueOptionsMatcher
       | Matcher<{ delay?: number; keysIfUndelivered?: Deno.KvKey[] }>,
