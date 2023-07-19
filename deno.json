@@ -1,0 +1,13 @@
+{
+  "imports": {
+  },
+  "tasks": {
+    "test": "deno test --unstable --coverage=cov --doc --parallel",
+    "coverage": "deno coverage cov --exclude='test.ts' --lcov --output=cov.lcov",
+    "ok": "deno fmt --check && deno lint && deno task test && deno task coverage",
+    "update:deps": "deno run -A https://deno.land/x/udd/main.ts --test=\"deno task test\" deps.ts"
+  },
+  "exclude": [
+    "/cov"
+  ]
+}
